@@ -18,6 +18,8 @@ def create_tables(conn):
     cur.execute("""CREATE TABLE IF NOT EXISTS pipeline_runs (
                     run_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                     started_at timestamptz NOT NULL DEFAULT now(),
+                    finished_at timestamptz,
+                    rows_new int,
                     status text NOT NULL
     );
     CREATE TABLE IF NOT EXISTS listings (
@@ -30,6 +32,14 @@ def create_tables(conn):
                     age text,
                     first_seen_at timestamptz NOT NULL DEFAULT now(),
                     last_seen_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS run_issues (
+                    issue_id  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    run_id integer REFERENCES pipeline_runs(run_id) NOT NULL,
+                    severity text NOT NULL CHECK (severity IN ('HIGH','MEDIUM','LOW')),
+                    code text NOT NULL,
+                    detail text,
+                    created_at timestamptz NOT NULL DEFAULT now()           
     );
     """)
     cur.close()
@@ -51,3 +61,24 @@ def upsert_listings(conn, rows):
             row
         )
     cur.close()
+
+def start_run(conn):
+    cur = conn.cursor()
+    cur.execute("INSERT INTO pipeline_runs (status) VALUES (%s) RETURNING run_id", ("running", ))
+    run_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    return run_id
+
+def log_issue(conn, run_id, severity, code, detail):
+    cur = conn.cursor()
+    cur.execute ("INSERT INTO run_issues (run_id, severity, code, detail) VALUES (%s, %s, %s, %s)",
+                 (run_id, severity, code, detail, ))
+    cur.close()
+
+def finish_run(conn, run_id, status, rows_new):
+    cur = conn.cursor()
+    cur.execute("UPDATE pipeline_runs SET status = %s, rows_new = %s, finished_at = now() WHERE run_id = %s",
+                (status, rows_new, run_id, ))
+    cur.close()
+
