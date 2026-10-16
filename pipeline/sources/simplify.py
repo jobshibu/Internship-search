@@ -41,9 +41,8 @@ def parse(text):
     return parsed_jobs
 
 
-jobs = parse(fetch())
-
 if __name__ == "__main__":
+    jobs = parse(fetch())
     print(len(jobs))
     print(jobs[20])
     print(jobs[2])
